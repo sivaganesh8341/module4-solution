@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="MenuApp">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Menu</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+    <script src="https://unpkg.com/@uirouter/angularjs/release/angular-ui-router.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 800px; margin: 30px auto; padding: 30px; background-color: #fff; border-radius: 12px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); }
+        h1 { color: #28a745; text-align: center; margin-bottom: 30px; font-weight: 600; }
+        ul { list-style: none; padding: 0; }
+        li { margin-bottom: 15px; }
+        a { display: block; padding: 16px 20px; background-color: #e9ecef; border-radius: 8px; transition: background-color 0.3s ease, transform 0.2s ease; text-decoration: none; color: #333; font-weight: 500; }
+        a:hover { background-color: #d1d5db; transform: translateY(-2px); }
+        .category-item { font-weight: 600; }
+        .item-list-item { border-bottom: 1px solid #dee2e6; padding: 20px 0; }
+        .item-list-item:last-child { border-bottom: none; }
+        .back-link { display: inline-block; margin-bottom: 25px; color: #6c757d; font-size: 0.95em; transition: color 0.3s ease; }
+        .back-link:hover { color: #495057; }
+        .loading-indicator { text-align: center; margin-top: 40px; font-style: italic; color: #868e96; }
+        .home-welcome { text-align: center; padding: 60px 0; }
+        .home-welcome h1 { font-size: 2.5em; color: #28a745; }
+        .home-welcome p { font-size: 1.1em; color: #6c757d; margin-bottom: 30px; }
+        .home-welcome a { display: inline-block; padding: 18px 24px; background-color: #28a745; color: #fff; border-radius: 10px; font-weight: 600; transition: background-color 0.3s ease, transform 0.2s ease; }
+        .home-welcome a:hover { background-color: #218838; transform: translateY(-3px); }
+        .item-description { color: #6c757d; margin-top: 8px; }
+        .category-name { font-size: 1.2em; font-weight: 600; margin-bottom: 15px; }
+    </style>
+    <script>
+        (function () {
+            'use strict';
+
+            angular.module('MenuApp', ['ui.router', 'data']);
+
+            angular.module('data', []);
+
+            angular.module('data')
+                .service('MenuDataService', MenuDataService);
+
+            MenuDataService.$inject = ['$http', '$q'];
+            function MenuDataService($http, $q) {
+                var service = this;
+
+                service.getAllCategories = function () {
+                    return $http({
+                        method: 'GET',
+                        url: 'https://coursera-jhu-default-rtdb.firebaseio.com/categories.json'
+                    }).then(function (response) {
+                        return response.data;
+                    }).catch(function(error){
+                        console.error("Error fetching categories:", error);
+                        return $q.reject("Failed to load categories.");
+                    });
+                };
+
+                service.getItemsForCategory = function (categoryShortName) {
+                    return $http({
+                        method: 'GET',
+                        url: 'https://coursera-jhu-default-rtdb.firebaseio.com/menu_items/' + categoryShortName + '.json'
+                    }).then(function (response) {
+                        return response.data.menu_items;
+                    }).catch(function(error){
+                        console.error("Error fetching items:", error);
+                        return $q.reject("Failed to load items.");
+                    });
+                };
+            }
+
+            angular.module('MenuApp')
+                .component('categories', {
+                    template: '<div class="container"><h1>Menu Categories</h1><ul ng-if="$ctrl.categories.length > 0"><li ng-repeat="category in $ctrl.categories"><a ui-sref="items({categoryShortName: category.short_name})" class="category-item">{{ category.name }}</a></li></ul><div ng-if="$ctrl.categories.length === 0" class="loading-indicator">Loading categories...</div></div>',
+                    bindings: {
+                        categories: '<'
+                    }
+                });
+
+            angular.module('MenuApp')
+                .component('items', {
+                    template: '<div class="container"><a ui-sref="categories" class="back-link">Back to Categories</a><h1 class="category-name">{{$ctrl.categoryName}}</h1><ul ng-if="$ctrl.items.length > 0"><li ng-repeat="item in $ctrl.items" class="item-list-item"><strong>{{ item.name }}</strong><p class="item-description">{{ item.description }}</p></li></ul><div ng-if="$ctrl.items.length === 0" class="loading-indicator">Loading items...</div></div>',
+                    bindings: {
+                        items: '<',
+                        categoryName: '<'
+                    }
+                });
+
+            angular.module('MenuApp')
+                .config(RoutesConfig);
+
+            RoutesConfig.$inject = ['$stateProvider', '$urlRouterProvider'];
+            function RoutesConfig($stateProvider, $urlRouterProvider) {
+
+                $urlRouterProvider.otherwise('/');
+
+                $stateProvider
+                    .state('home', {
+                        url: '/',
+                        template: '<div class="home-welcome container"><h1>Welcome to Our Culinary Delights</h1><p>Explore our diverse menu and savor the flavors.</p><a ui-sref="categories">Discover the Menu</a></div>'
+                    })
+                    .state('categories', {
+                        url: '/categories',
+                        template: '<categories categories="$resolve.categories"></categories>',
+                        resolve: {
+                            categories: ['MenuDataService', function (MenuDataService) {
+                                return MenuDataService.getAllCategories();
+                            }]
+                        }
+                    })
+                    .state('items', {
+                        url: '/items/{categoryShortName}',
+                        template: '<items items="$resolve.items" categoryName="$resolve.categoryName"></items>',
+                        resolve: {
+                            items: ['MenuDataService', '$stateParams', function (MenuDataService, $stateParams) {
+                                return MenuDataService.getItemsForCategory($stateParams.categoryShortName);
+                            }],
+                            categoryName: ['MenuDataService', '$stateParams', function(MenuDataService, $stateParams){
+                                return MenuDataService.getAllCategories().then(function(categories){
+                                    for(var i = 0; i < categories.length; i++){
+                                        if (categories[i].short_name === $stateParams.categoryShortName){
+                                            return categories[i].name;
+                                        }
+                                    }
+                                    return "Category Items";
+                                });
+
+                            }]
+                        }
+                    });
+            }
+        })();
+    </script>
+</head>
+<body>
+    <ui-view></ui-view>
+</body>
+</html>
